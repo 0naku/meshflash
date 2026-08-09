@@ -29,16 +29,49 @@ corrections need no issue.
 
 ## Set up the build
 
-1. Install Rust 1.95 or newer with [rustup](https://rustup.rs).
-2. Clone the repository.
-3. Run `cargo build` in the project folder.
+You cannot push to the main repository. Work in a fork of it.
 
-On Linux, install the development packages for `libudev` and GTK first. On
-Debian and Ubuntu, run this command:
+1. Install Rust 1.95 or newer with [rustup](https://rustup.rs). A version from
+   your operating system is usually too old.
+2. Click **Fork** on the GitHub page of the project.
+3. Clone your fork, and use your own account name:
+
+```
+git clone https://github.com/YOUR-NAME/meshflash.git
+cd meshflash
+```
+
+4. On Linux, install the development packages for `libudev` and GTK. On Debian
+   and Ubuntu, run this command:
 
 ```
 sudo apt install libudev-dev libgtk-3-dev
 ```
+
+5. Run `cargo build` in the project folder.
+
+## Send your change
+
+1. Make a branch for your work:
+
+```
+git switch -c short-name-for-the-change
+```
+
+2. Write the change. Then run the three checks in the next section.
+3. Commit and push to your fork:
+
+```
+git push -u origin short-name-for-the-change
+```
+
+4. Open a pull request against the `main` branch of the main repository. GitHub
+   shows a button for this after your push.
+5. Fill in the pull request form. It asks which checks you ran, and it asks for
+   the result of a hardware test.
+
+CI runs on your pull request. It does the same three checks, and it builds on
+Windows, Linux, and macOS.
 
 ## Run the checks
 
@@ -69,12 +102,15 @@ facts in the pull request:
 - The firmware function and the version that you flashed.
 - The result: the device started, or it did not start.
 
-If you cannot do a hardware test, say so in the pull request. A reviewer with
-the device can then do the test. An untested flashing change is not merged.
+An untested flashing change is not merged. The person who sends the change does
+the test and gives the proof.
 
-The nRF52 path needs help most. The protocol code passes unit tests, but the
-full DFU flow has no hardware test yet. See the Status section of the
-[README](README.md).
+When you cannot do the test, say so in the pull request. It then stays open
+until a person with that device tests it and writes the result there.
+
+The nRF52 path needs help most, for the same reason. The protocol code passes
+unit tests, but the full DFU flow has no hardware test yet. See the Status
+section of the [README](README.md).
 
 ## Code style
 
@@ -107,6 +143,54 @@ To change the icon, replace all three files. Keep these two formats:
 
 Open an issue before you change the artwork. Then we can agree on the design
 first.
+
+## Make a release
+
+CI builds the release. Do not upload a binary by hand.
+
+1. Set the new version in `Cargo.toml`.
+2. Run `cargo build` so that `Cargo.lock` gets the new version.
+3. Commit both files.
+4. Make the tag and push it:
+
+```
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The tag must agree with the version in `Cargo.toml`. The workflow stops with an
+error when the two are different.
+
+CI then builds Windows, Linux, and macOS, and it makes a **draft** release with
+the three archives and a SHA-256 file for each one. Read the draft, then publish
+it by hand. A draft gives you the last check before users get a flasher that can
+stop a device.
+
+Each archive holds the program, the README, `LICENSE`, and
+`THIRD_PARTY_NOTICES.md`. The two licenses ask for their notice in each
+distribution, so do not publish a binary without those files.
+
+### When the workflow fails
+
+The release step needs all three builds. If one platform fails, you get no
+release at all. You do not get a release with two archives.
+
+For a fault in the code, such as a compile error on macOS:
+
+1. Correct the code on `main`.
+2. Delete the tag on GitHub and on your computer:
+
+```
+git push --delete origin v0.2.0
+git tag -d v0.2.0
+```
+
+3. When the workflow already made a draft release, delete that draft. A second
+   run cannot make a release that is there.
+4. Make the tag again and push it.
+
+For a fault outside the code, such as a network error, open the run page on
+GitHub and use **Re-run all jobs**. The tag then stays as it is.
 
 ## Keep the catalog in agreement with the web flasher
 

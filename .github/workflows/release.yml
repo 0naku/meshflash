@@ -1,0 +1,165 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# The default token can only read. Only the job that creates the release gets
+# write, so a build step cannot change the repository.
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify:
+    name: Check the version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare the tag with Cargo.toml
+        id: version
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest=$(grep -m1 '^version = ' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          if [ "$tag" != "$manifest" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not agree with version $manifest in Cargo.toml."
+            exit 1
+          fi
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.label }}
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: windows-x86_64
+          - os: ubuntu-latest
+            label: linux-x86_64
+          - os: macos-latest
+            label: macos-aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev libgtk-3-dev
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release
+
+      # The archive carries LICENSE and THIRD_PARTY_NOTICES.md. Both licenses
+      # ask for their notice in each distribution, so a bare binary is not
+      # enough.
+      - name: Pack the archive (Linux and macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+          LABEL: ${{ matrix.label }}
+        run: |
+          dir="meshflash-${VERSION}-${LABEL}"
+          mkdir "$dir"
+          cp target/release/meshflash "$dir/"
+          cp README.md LICENSE THIRD_PARTY_NOTICES.md "$dir/"
+          tar -czf "${dir}.tar.gz" "$dir"
+          shasum -a 256 "${dir}.tar.gz" > "${dir}.tar.gz.sha256"
+
+      - name: Pack the archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+          LABEL: ${{ matrix.label }}
+        run: |
+          $dir = "meshflash-$env:VERSION-$env:LABEL"
+          New-Item -ItemType Directory -Path $dir | Out-Null
+          Copy-Item target/release/meshflash.exe $dir/
+          Copy-Item README.md, LICENSE, THIRD_PARTY_NOTICES.md $dir/
+          Compress-Archive -Path $dir -DestinationPath "$dir.zip"
+          $hash = (Get-FileHash "$dir.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $dir.zip" | Out-File "$dir.zip.sha256" -Encoding ascii
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.label }}
+          path: |
+            meshflash-*.tar.gz
+            meshflash-*.zip
+            meshflash-*.sha256
+          if-no-files-found: error
+
+  release:
+    name: Publish the draft release
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Write the release notes
+        shell: bash
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          cat > notes.md <<'EOF'
+          MeshFlash is a native desktop flasher for MeshCore firmware.
+
+          ## Download
+
+          | Platform | File |
+          |---|---|
+          | Windows | `meshflash-VERSION-windows-x86_64.zip` |
+          | Linux | `meshflash-VERSION-linux-x86_64.tar.gz` |
+          | macOS (Apple silicon) | `meshflash-VERSION-macos-aarch64.tar.gz` |
+
+          Each archive holds the program, the README, and the license files.
+          MeshFlash needs no installer.
+
+          ## Test status
+
+          Windows is tested on hardware with an ESP32-S3 board. The Linux build
+          and the macOS build come from CI. Nobody has run them on a device yet.
+
+          On Linux, add your user to the `dialout` group first. Without that
+          group a normal user cannot open a serial port.
+
+          > **CAUTION: Before you flash an nRF52 device, learn how to recover
+          > it.** The nRF52 path has no hardware test yet. A failed flash stops
+          > the device until you recover it.
+
+          ## Check the download
+
+          Each archive has a `.sha256` file. Compare the two values before you
+          use the program:
+
+          ```
+          shasum -a 256 -c meshflash-VERSION-linux-x86_64.tar.gz.sha256
+          ```
+          EOF
+          sed -i "s/VERSION/${VERSION}/g" notes.md
+
+      - name: Create the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          gh release create "v${VERSION}" \
+            --title "MeshFlash v${VERSION}" \
+            --notes-file notes.md \
+            --draft \
+            artifacts/*
