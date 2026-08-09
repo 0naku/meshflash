@@ -1,6 +1,6 @@
 # MeshFlash
 
-MeshFlash is a native desktop flasher for [MeshCore](https://meshcore.co.uk)
+MeshFlash is a native desktop flasher for [MeshCore](https://meshcore.io)
 firmware. It is a Rust/egui port of the official web flasher,
 [flasher.meshcore.io](https://github.com/meshcore-dev/flasher.meshcore.io).
 
@@ -188,7 +188,7 @@ MeshFlash builds on the work of these projects:
 - **[espflash](https://github.com/esp-rs/espflash)** by the esp-rs team —
   powers all ESP32 flashing.
 - **[egui](https://github.com/emilk/egui)** by Emil Ernerfeldt — the UI toolkit.
-- The **[MeshCore](https://meshcore.co.uk)** project itself, for the firmware
+- The **[MeshCore](https://meshcore.io)** project itself, for the firmware
   and the ecosystem that make all of this useful.
 
 ## License
