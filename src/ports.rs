@@ -1,4 +1,5 @@
-//! Serial port enumeration with USB metadata for friendlier picking.
+//! A list of the serial ports, with the USB data that helps the user select
+//! the correct one.
 
 use serialport::{SerialPortInfo, SerialPortType};
 
@@ -9,6 +10,11 @@ pub struct PortEntry {
     pub is_usb: bool,
     pub vid: u16,
     pub pid: u16,
+    /// USB serial number, when the board reports one. A board keeps this number
+    /// when it re-enumerates. The port name and the product ID can change, but
+    /// this number does not. Thus this field is the only one that names the same
+    /// board before and after a reset.
+    pub serial: Option<String>,
 }
 
 pub fn list_ports() -> Vec<PortEntry> {
@@ -17,12 +23,13 @@ pub fn list_ports() -> Vec<PortEntry> {
         .into_iter()
         .map(describe)
         .collect();
-    // USB devices first (the radios), then everything else.
+    // USB ports first, because a board is always on a USB port. All other
+    // ports follow.
     entries.sort_by(|a, b| b.is_usb.cmp(&a.is_usb).then(a.name.cmp(&b.name)));
     entries
 }
 
-/// USB vendor IDs commonly seen on each chip family's boards.
+/// The USB vendor IDs of the boards in each chip family.
 const ESP32_VIDS: &[u16] = &[
     0x303A, // Espressif (native USB / USB-Serial-JTAG)
     0x10C4, // Silicon Labs CP210x
@@ -35,9 +42,9 @@ const NRF52_VIDS: &[u16] = &[
     0x1915, // Nordic
 ];
 
-/// USB ports that belong to the chip family of `device_type`. A radio keeps
-/// its vendor ID when it re-enumerates. This function therefore finds the same
-/// radio again after it took a new port name.
+/// USB ports that belong to the chip family of `device_type`. A board keeps
+/// its vendor ID when it re-enumerates. Thus this function finds the same
+/// board again after the board took a new port name.
 pub fn family_candidates(entries: &[PortEntry], device_type: &str) -> Vec<PortEntry> {
     let vids: &[u16] = match device_type {
         "esp32" => ESP32_VIDS,
@@ -51,8 +58,8 @@ pub fn family_candidates(entries: &[PortEntry], device_type: &str) -> Vec<PortEn
         .collect()
 }
 
-/// Best-guess port for a device type. The UI uses it to pre-select the
-/// port. Then most users do not think about COM numbers.
+/// The most probable port for a device type. The UI uses it to pre-select the
+/// port. Then most users do not think about port names.
 pub fn auto_pick(entries: &[PortEntry], device_type: &str) -> Option<String> {
     let vids: &[u16] = match device_type {
         "esp32" => ESP32_VIDS,
@@ -84,6 +91,7 @@ fn describe(info: SerialPortInfo) -> PortEntry {
                 is_usb: true,
                 vid: usb.vid,
                 pid: usb.pid,
+                serial: usb.serial_number.clone(),
             }
         }
         _ => PortEntry {
@@ -92,6 +100,7 @@ fn describe(info: SerialPortInfo) -> PortEntry {
             is_usb: false,
             vid: 0,
             pid: 0,
+            serial: None,
         },
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "meshflash"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Desktop flasher for MeshCore firmware (ESP32 + nRF52)"
 license = "MIT"
@@ -20,9 +20,14 @@ eframe = { version = "0.36", default-features = false, features = [
     "x11",
 ] }
 serialport = "4"
-espflash = { version = "4", default-features = false, features = ["serialport"] }
+espflash = { version = "4", default-features = false, features = [
+    "serialport",
+] }
 zip = { version = "8", default-features = false, features = ["deflate"] }
-ureq = { version = "3", default-features = false, features = ["native-tls", "gzip"] }
+ureq = { version = "3", default-features = false, features = [
+    "native-tls",
+    "gzip",
+] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 regex = "1"
